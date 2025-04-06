@@ -65,6 +65,7 @@ export default function IndexPopup() {
   const [result, setResult] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [productCount, setProductCount] = useState(0)
+  const [pageLimit, setPageLimit] = useState(1)
 
   /**
    * 测试与内容脚本的连接
@@ -96,7 +97,10 @@ export default function IndexPopup() {
       })
 
       const response = (await Promise.race([
-        chrome.tabs.sendMessage(tab.id, { action: "start-crawl" }),
+        chrome.tabs.sendMessage(tab.id, {
+          action: "start-crawl",
+          pageLimit
+        }),
         new Promise<CrawlResponse>((_, reject) =>
           setTimeout(() => reject(new Error("请求超时")), 5000)
         )
@@ -122,18 +126,39 @@ export default function IndexPopup() {
         width: 300,
         fontFamily: "Arial, sans-serif"
       }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          marginBottom: 16
-        }}>
-        <Button onClick={testConnection} disabled={isLoading} color="#2196F3">
-          测试连接
-        </Button>
-        <Button onClick={startCrawling} disabled={isLoading}>
-          {isLoading ? "爬取中..." : "开始爬取"}
-        </Button>
+      <div style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 8
+          }}>
+          <Button onClick={testConnection} disabled={isLoading} color="#2196F3">
+            测试连接
+          </Button>
+          <Button onClick={startCrawling} disabled={isLoading}>
+            {isLoading ? "爬取中..." : "开始爬取"}
+          </Button>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <label style={{ display: "block", marginBottom: 4 }}>
+            爬取页数限制:
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={pageLimit}
+            onChange={(e) =>
+              setPageLimit(Math.max(1, parseInt(e.target.value) || 1))
+            }
+            style={{
+              width: "100%",
+              padding: "4px 8px",
+              border: "1px solid #ccc",
+              borderRadius: 4
+            }}
+          />
+        </div>
       </div>
 
       <StatusDisplay result={result} productCount={productCount} />

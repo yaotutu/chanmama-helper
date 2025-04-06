@@ -81,16 +81,39 @@ function showNotification(message: string): void {
 
 // 处理来自popup的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  const handleCrawlRequest = async (): Promise<CrawlResponse> => {
+  const handleCrawlRequest = async (pageLimit = 1): Promise<CrawlResponse> => {
     try {
-      const products = await crawlChanmama()
-      await storage.set("products", JSON.stringify(products))
+      let allProducts: Product[] = []
+      let currentPage = 1
+
+      while (currentPage <= pageLimit) {
+        console.log(`[Chanmama Helper] 开始爬取第 ${currentPage} 页`)
+        const products = await crawlChanmama()
+        allProducts.push(...products)
+
+        if (currentPage < pageLimit) {
+          const nextButton = document.querySelector(SELECTORS.NEXT_PAGE_BUTTON)
+          if (nextButton) {
+            console.log(`[Chanmama Helper] 跳转到第 ${currentPage + 1} 页`)
+            ;(nextButton as HTMLElement).click()
+            await new Promise((resolve) => setTimeout(resolve, 2000)) // 等待页面加载
+            currentPage++
+          } else {
+            console.log("[Chanmama Helper] 没有更多页面可爬取")
+            break
+          }
+        } else {
+          currentPage++
+        }
+      }
+
+      // await storage.set("products", JSON.stringify(allProducts))
       console.log(
         "[Chanmama Helper] 商品数据已存储到本地存储",
-        JSON.stringify(products)
+        JSON.stringify(allProducts)
       )
-      showNotification("爬取成功！")
-      return { success: true, count: products.length }
+      showNotification(`爬取成功！共 ${allProducts.length} 条数据`)
+      return { success: true, count: allProducts.length }
     } catch (error) {
       console.error("[Chanmama Helper] 爬取失败:", error)
       return {
@@ -107,7 +130,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break
 
     case "start-crawl":
-      handleCrawlRequest()
+      handleCrawlRequest(request.pageLimit)
         .then((response) => sendResponse(response))
         .catch((error) => {
           console.error("[Chanmama Helper] 消息处理错误:", error)
