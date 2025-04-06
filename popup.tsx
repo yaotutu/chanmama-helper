@@ -29,11 +29,27 @@ export default function IndexPopup() {
         currentWindow: true
       })
 
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        action: "start-crawl"
-      })
+      // 设置5秒超时
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("请求超时")), 5000)
+      )
 
-      console.log("爬取结果:", response)
+      try {
+        const response = await Promise.race([
+          chrome.tabs.sendMessage(tab.id, { action: "start-crawl" }),
+          timeout
+        ])
+
+        if (response?.success) {
+          setResult("爬取成功")
+          setProductCount(response.count)
+          console.log("爬取结果:", response)
+        } else {
+          setResult(`爬取失败: ${response?.error || "未知错误"}`)
+        }
+      } catch (error) {
+        setResult(`爬取失败: ${error.message}`)
+      }
     } catch (error) {
       setResult("爬取失败: " + error.message)
     } finally {

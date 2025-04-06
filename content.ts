@@ -5,90 +5,98 @@ const storage = new Storage()
 interface Product {
   title: string
   link: string
+  price?: string
+  sales?: number
+}
+
+const SELECTORS = {
+  PRODUCT_ROW: "tbody > tr",
+  PRODUCT_TITLE: "a.product-title",
+  NEXT_PAGE_BUTTON: ".el-pagination .btn-next:not(.is-disabled)"
+}
+
+const NOTIFICATION_STYLES = {
+  position: "fixed",
+  bottom: "10px",
+  right: "10px",
+  padding: "10px",
+  background: "orange",
+  color: "white",
+  zIndex: "9999"
 }
 
 async function crawlChanmama(): Promise<Product[]> {
-  console.log("开始爬取蝉妈妈商品数据...")
+  console.log("[Chanmama Helper] 开始爬取商品数据...")
   const allProducts: Product[] = []
-  let hasNextPage = true
   let pageNum = 1
 
-  while (hasNextPage) {
-    console.log(`正在处理第 ${pageNum} 页...`)
-
+  try {
     // 等待商品表格加载
     await new Promise((resolve) => setTimeout(resolve, 1000))
 
-    const products = Array.from(document.querySelectorAll("tbody > tr"))
-      .map((row) => {
-        // const nameElement = row.querySelector("a.ellipsis-2")
-        // const linkElement = row.querySelector("a.img-box")
-        const titleLink = row.querySelector("a.product-title") as any
-        const title = titleLink?.textContent.trim() || ""
-        const link = titleLink?.href || ""
+    const rows = document.querySelectorAll(SELECTORS.PRODUCT_ROW)
+    if (!rows.length) {
+      throw new Error("未找到商品数据表格")
+    }
 
-        return title && link
-          ? {
-              title,
-              link
-            }
-          : null
+    const products = Array.from(rows)
+      .map((row) => {
+        const titleLink = row.querySelector<HTMLAnchorElement>(
+          SELECTORS.PRODUCT_TITLE
+        )
+        if (!titleLink) return null
+
+        return {
+          title: titleLink.textContent?.trim() || "",
+          link: titleLink.href
+        }
       })
       .filter(Boolean) as Product[]
-    // 打印products
-    products.forEach((product) => {
-      console.log("商品标题:", product.title)
-      console.log("商品链接:", product.link)
-    })
 
     allProducts.push(...products)
-    console.log(`第 ${pageNum} 页提取到 ${products.length} 条商品数据`)
-    hasNextPage = false
-    // 检查是否有下一页
-    // const nextBtn = document.querySelector(
-    //   ".el-pagination .btn-next:not(.is-disabled)"
-    // )
-    // if (nextBtn) {
-    //   ;(nextBtn as HTMLElement).click()
-    //   pageNum++
-    //   await new Promise((resolve) => setTimeout(resolve, 2000)) // 等待页面加载
-    // } else {
-    //   hasNextPage = false
-    //   console.log("已到达最后一页")
-    // }
+    console.log(`[Chanmama Helper] 成功提取 ${products.length} 条商品数据`)
+  } catch (error) {
+    console.error("[Chanmama Helper] 爬取过程中发生错误:", error)
   }
 
   return allProducts
 }
 
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
-  if (request.action === "popup-clicked") {
-    const div = document.createElement("div")
-    div.textContent = "👋 蝉妈妈助手已激活！"
-    div.style.position = "fixed"
-    div.style.bottom = "10px"
-    div.style.right = "10px"
-    div.style.padding = "10px"
-    div.style.background = "orange"
-    div.style.color = "white"
-    div.style.zIndex = "9999"
-    document.body.appendChild(div)
-  }
+function showNotification(message: string): void {
+  const notification = document.createElement("div")
+  notification.textContent = message
+  Object.assign(notification.style, NOTIFICATION_STYLES)
+  document.body.appendChild(notification)
 
-  if (request.action === "start-crawl") {
-    try {
-      const products = await crawlChanmama()
-      console.log("爬取完成，共获取商品:", products.length)
+  setTimeout(() => {
+    notification.remove()
+  }, 3000)
+}
 
-      // 存储数据并发送回popup
-      // await chrome.storage.local.set({ products })
-      await storage.set("start-crawl", JSON.stringify(products))
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  switch (request.action) {
+    case "popup-clicked":
+      showNotification("👋 蝉妈妈助手已激活！")
+      sendResponse({ success: true })
+      break
 
-      sendResponse({ success: true, count: products.length })
-    } catch (error) {
-      console.error("爬取失败:", error)
-      sendResponse({ success: false, error: error.message })
-    }
-    return true // 保持消息通道开放用于异步响应
+    case "start-crawl":
+      ;(async () => {
+        try {
+          const products = await crawlChanmama()
+          await storage.set("products", JSON.stringify(products))
+          sendResponse({ success: true, count: products.length })
+        } catch (error) {
+          console.error("[Chanmama Helper] 爬取失败:", error)
+          sendResponse({
+            success: false,
+            error: error instanceof Error ? error.message : "未知错误"
+          })
+        }
+      })()
+      return true // 保持消息通道开放
+
+    default:
+      sendResponse({ success: false, error: "未知操作类型" })
   }
 })
