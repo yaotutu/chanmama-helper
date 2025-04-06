@@ -1,11 +1,6 @@
 import { SELECTORS } from "./constants"
-
-interface Product {
-  title: string
-  link: string
-  price?: string
-  sales?: number
-}
+import { getLatestProducts, saveProducts } from "./db"
+import type { Product } from "./types"
 
 interface CrawlResponse {
   success: boolean
@@ -101,9 +96,11 @@ async function handlePagination(pageLimit: number): Promise<Product[]> {
 export async function crawlChanmama(pageLimit = 1): Promise<CrawlResponse> {
   try {
     const allProducts = await handlePagination(pageLimit)
+    const timestamp = Date.now().toString()
+    const key = await saveProducts(allProducts as Product[])
     console.log(
-      "[Chanmama Helper] 商品数据已存储到本地存储",
-      JSON.stringify(allProducts)
+      `[Chanmama Helper] 商品数据已存储到数据库，key: ${key}`,
+      allProducts.length
     )
     return { success: true, count: allProducts.length }
   } catch (error) {
