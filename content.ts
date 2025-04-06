@@ -1,7 +1,21 @@
 import { Storage } from "@plasmohq/storage"
 
+import { NOTIFICATION_STYLES, SELECTORS } from "./constants"
+
 const storage = new Storage()
 
+/**
+ * 爬取响应接口
+ */
+interface CrawlResponse {
+  success: boolean
+  count?: number
+  error?: string
+}
+
+/**
+ * 商品数据接口
+ */
 interface Product {
   title: string
   link: string
@@ -9,26 +23,13 @@ interface Product {
   sales?: number
 }
 
-const SELECTORS = {
-  PRODUCT_ROW: "tbody > tr",
-  PRODUCT_TITLE: "a.product-title",
-  NEXT_PAGE_BUTTON: ".el-pagination .btn-next:not(.is-disabled)"
-}
-
-const NOTIFICATION_STYLES = {
-  position: "fixed",
-  bottom: "10px",
-  right: "10px",
-  padding: "10px",
-  background: "orange",
-  color: "white",
-  zIndex: "9999"
-}
-
+/**
+ * 爬取蝉妈妈商品数据
+ * @returns 返回爬取到的商品数组
+ */
 async function crawlChanmama(): Promise<Product[]> {
   console.log("[Chanmama Helper] 开始爬取商品数据...")
   const allProducts: Product[] = []
-  let pageNum = 1
 
   try {
     // 等待商品表格加载
@@ -57,11 +58,16 @@ async function crawlChanmama(): Promise<Product[]> {
     console.log(`[Chanmama Helper] 成功提取 ${products.length} 条商品数据`)
   } catch (error) {
     console.error("[Chanmama Helper] 爬取过程中发生错误:", error)
+    throw error // 重新抛出错误以便上层处理
   }
 
   return allProducts
 }
 
+/**
+ * 显示通知消息
+ * @param message 要显示的消息内容
+ */
 function showNotification(message: string): void {
   const notification = document.createElement("div")
   notification.textContent = message
@@ -73,7 +79,27 @@ function showNotification(message: string): void {
   }, 3000)
 }
 
+// 处理来自popup的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  const handleCrawlRequest = async (): Promise<CrawlResponse> => {
+    try {
+      const products = await crawlChanmama()
+      await storage.set("products", JSON.stringify(products))
+      console.log(
+        "[Chanmama Helper] 商品数据已存储到本地存储",
+        JSON.stringify(products)
+      )
+      showNotification("爬取成功！")
+      return { success: true, count: products.length }
+    } catch (error) {
+      console.error("[Chanmama Helper] 爬取失败:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "未知错误"
+      }
+    }
+  }
+
   switch (request.action) {
     case "popup-clicked":
       showNotification("👋 蝉妈妈助手已激活！")
@@ -81,19 +107,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break
 
     case "start-crawl":
-      ;(async () => {
-        try {
-          const products = await crawlChanmama()
-          await storage.set("products", JSON.stringify(products))
-          sendResponse({ success: true, count: products.length })
-        } catch (error) {
-          console.error("[Chanmama Helper] 爬取失败:", error)
+      handleCrawlRequest()
+        .then((response) => sendResponse(response))
+        .catch((error) => {
+          console.error("[Chanmama Helper] 消息处理错误:", error)
           sendResponse({
             success: false,
-            error: error instanceof Error ? error.message : "未知错误"
+            error: "处理请求时发生错误"
           })
-        }
-      })()
+        })
       return true // 保持消息通道开放
 
     default:
