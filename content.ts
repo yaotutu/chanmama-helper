@@ -78,70 +78,83 @@ function showNotification(message: string): void {
     notification.remove()
   }, 3000)
 }
+/**
+ * 处理爬取请求
+ */
+async function handleCrawlRequest(pageLimit = 1): Promise<CrawlResponse> {
+  try {
+    let allProducts: Product[] = []
+    let currentPage = 1
+
+    while (currentPage <= pageLimit) {
+      console.log(`[Chanmama Helper] 开始爬取第 ${currentPage} 页`)
+      const products = await crawlChanmama()
+      allProducts.push(...products)
+
+      if (currentPage < pageLimit) {
+        const nextButton = document.querySelector(SELECTORS.NEXT_PAGE_BUTTON)
+        if (nextButton) {
+          console.log(`[Chanmama Helper] 跳转到第 ${currentPage + 1} 页`)
+          ;(nextButton as HTMLElement).click()
+          await new Promise((resolve) => setTimeout(resolve, 2000)) // 等待页面加载
+          currentPage++
+        } else {
+          console.log("[Chanmama Helper] 没有更多页面可爬取")
+          break
+        }
+      } else {
+        currentPage++
+      }
+    }
+
+    console.log(
+      "[Chanmama Helper] 商品数据已存储到本地存储",
+      JSON.stringify(allProducts)
+    )
+    showNotification(`爬取成功！共 ${allProducts.length} 条数据`)
+    return { success: true, count: allProducts.length }
+  } catch (error) {
+    console.error("[Chanmama Helper] 爬取失败:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "未知错误"
+    }
+  }
+}
+
+/**
+ * 处理开始爬取消息
+ */
+function handleStartCrawl(
+  pageLimit: number,
+  sendResponse: (response: any) => void
+) {
+  handleCrawlRequest(pageLimit)
+    .then((response) => sendResponse(response))
+    .catch((error) => {
+      console.error("[Chanmama Helper] 消息处理错误:", error)
+      sendResponse({
+        success: false,
+        error: "处理请求时发生错误"
+      })
+    })
+  return true // 保持消息通道开放
+}
+
+/**
+ * 处理未知操作类型
+ */
+function handleUnknownAction(sendResponse: (response: any) => void) {
+  sendResponse({ success: false, error: "未知操作类型" })
+}
 
 // 处理来自popup的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  const handleCrawlRequest = async (pageLimit = 1): Promise<CrawlResponse> => {
-    try {
-      let allProducts: Product[] = []
-      let currentPage = 1
-
-      while (currentPage <= pageLimit) {
-        console.log(`[Chanmama Helper] 开始爬取第 ${currentPage} 页`)
-        const products = await crawlChanmama()
-        allProducts.push(...products)
-
-        if (currentPage < pageLimit) {
-          const nextButton = document.querySelector(SELECTORS.NEXT_PAGE_BUTTON)
-          if (nextButton) {
-            console.log(`[Chanmama Helper] 跳转到第 ${currentPage + 1} 页`)
-            ;(nextButton as HTMLElement).click()
-            await new Promise((resolve) => setTimeout(resolve, 2000)) // 等待页面加载
-            currentPage++
-          } else {
-            console.log("[Chanmama Helper] 没有更多页面可爬取")
-            break
-          }
-        } else {
-          currentPage++
-        }
-      }
-
-      // await storage.set("products", JSON.stringify(allProducts))
-      console.log(
-        "[Chanmama Helper] 商品数据已存储到本地存储",
-        JSON.stringify(allProducts)
-      )
-      showNotification(`爬取成功！共 ${allProducts.length} 条数据`)
-      return { success: true, count: allProducts.length }
-    } catch (error) {
-      console.error("[Chanmama Helper] 爬取失败:", error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "未知错误"
-      }
-    }
-  }
-
   switch (request.action) {
-    case "popup-clicked":
-      showNotification("👋 蝉妈妈助手已激活！")
-      sendResponse({ success: true })
-      break
-
     case "start-crawl":
-      handleCrawlRequest(request.pageLimit)
-        .then((response) => sendResponse(response))
-        .catch((error) => {
-          console.error("[Chanmama Helper] 消息处理错误:", error)
-          sendResponse({
-            success: false,
-            error: "处理请求时发生错误"
-          })
-        })
-      return true // 保持消息通道开放
+      return handleStartCrawl(request.pageLimit, sendResponse)
 
     default:
-      sendResponse({ success: false, error: "未知操作类型" })
+      return handleUnknownAction(sendResponse)
   }
 })
