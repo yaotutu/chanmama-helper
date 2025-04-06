@@ -1,9 +1,5 @@
-import { Storage } from "@plasmohq/storage"
-
 import { NOTIFICATION_STYLES } from "./constants"
 import { crawlChanmama } from "./crawler"
-
-const storage = new Storage()
 
 /**
  * 显示通知消息
@@ -21,32 +17,48 @@ function showNotification(message: string): void {
 }
 /**
  * 处理爬取请求
+ * @param pageLimit 爬取页数限制
+ * @param sendResponse 可选的消息响应回调
  */
-async function handleCrawlRequest(pageLimit = 1) {
-  const response = await crawlChanmama(pageLimit)
-  if (response.success) {
-    showNotification(`爬取成功！共 ${response.count} 条数据`)
-  }
-  return response
-}
-
-/**
- * 处理开始爬取消息
- */
-function handleStartCrawl(
-  pageLimit: number,
-  sendResponse: (response: any) => void
+function handleCrawlRequest(
+  pageLimit = 1,
+  sendResponse?: (response: any) => void
 ) {
-  handleCrawlRequest(pageLimit)
-    .then((response) => sendResponse(response))
-    .catch((error) => {
-      console.error("[Chanmama Helper] 消息处理错误:", error)
-      sendResponse({
+  if (sendResponse) {
+    // 异步处理请求但立即返回true保持通道开放
+    crawlChanmama(pageLimit)
+      .then((response) => {
+        if (response.success) {
+          showNotification(`爬取成功！共 ${response.count} 条数据`)
+        }
+        sendResponse(response)
+      })
+      .catch((error) => {
+        console.error("[Chanmama Helper] 爬取错误:", error)
+        sendResponse({
+          success: false,
+          error: "处理请求时发生错误"
+        })
+      })
+    return true // 立即返回以保持消息通道开放
+  }
+
+  // 没有sendResponse时保持原有同步逻辑
+  return (async () => {
+    try {
+      const response = await crawlChanmama(pageLimit)
+      if (response.success) {
+        showNotification(`爬取成功！共 ${response.count} 条数据`)
+      }
+      return response
+    } catch (error) {
+      console.error("[Chanmama Helper] 爬取错误:", error)
+      return {
         success: false,
         error: "处理请求时发生错误"
-      })
-    })
-  return true // 保持消息通道开放
+      }
+    }
+  })()
 }
 
 /**
@@ -60,7 +72,7 @@ function handleUnknownAction(sendResponse: (response: any) => void) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
     case "start-crawl":
-      return handleStartCrawl(request.pageLimit, sendResponse)
+      return handleCrawlRequest(request.pageLimit, sendResponse)
 
     default:
       return handleUnknownAction(sendResponse)
