@@ -22,7 +22,10 @@ async function crawlSinglePage(): Promise<Product[]> {
 
   try {
     // 等待商品表格加载
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // 随机延迟1-3秒，模拟人类阅读时间
+    await new Promise((resolve) =>
+      setTimeout(resolve, 1000 + Math.random() * 2000)
+    )
 
     const rows = document.querySelectorAll(SELECTORS.PRODUCT_ROW)
     if (!rows.length) {
@@ -60,6 +63,11 @@ async function handlePagination(pageLimit: number): Promise<Product[]> {
   let allProducts: Product[] = []
   let currentPage = 1
 
+  // 添加随机起始延迟，避免立即开始爬取
+  await new Promise((resolve) =>
+    setTimeout(resolve, 1000 + Math.random() * 2000)
+  )
+
   while (currentPage <= pageLimit) {
     console.log(`[Chanmama Helper] 开始爬取第 ${currentPage} 页`)
     const products = await crawlSinglePage()
@@ -70,7 +78,10 @@ async function handlePagination(pageLimit: number): Promise<Product[]> {
       if (nextButton) {
         console.log(`[Chanmama Helper] 跳转到第 ${currentPage + 1} 页`)
         ;(nextButton as HTMLElement).click()
-        await new Promise((resolve) => setTimeout(resolve, 2000)) // 等待页面加载
+        // 随机延迟2-5秒，模拟人类翻页间隔
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2000 + Math.random() * 3000)
+        )
         currentPage++
       } else {
         console.log("[Chanmama Helper] 没有更多页面可爬取")
