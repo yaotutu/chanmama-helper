@@ -3,7 +3,9 @@
  */
 export const SELECTORS = {
   PRODUCT_ROW: "tbody > tr",
-  PRODUCT_TITLE: "a.product-title",
+  // 商品库对应：a.ellipsis-2
+  PRODUCT_TITLE: "a.ellipsis-2",
+  // 商品榜对应：  a.product-title
   NEXT_PAGE_BUTTON: ".el-pagination .btn-next:not(.is-disabled)"
 } as const
 
